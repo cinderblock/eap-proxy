@@ -910,8 +910,11 @@ def main():
             return 1
 
     # ensure cleanup (atexit, etc) occurs when we're killed via SIGTERM
+    # Don't log in the handler: if SIGTERM lands during another log write, the
+    # handler's write fails as reentrant, logging swallows that error, and the
+    # exit is lost with it. SystemExit isn't an Exception, so logging lets it
+    # through.
     def on_sigterm(signum, __):
-        log.info("exiting on signal %d", signum)
         raise SystemExit(0)
 
     signal.signal(signal.SIGTERM, on_sigterm)
@@ -923,7 +926,11 @@ def main():
             log.exception("could not write pidfile: %s", strexc())
 
     proxy = proxy_loop_forever if args.daemon else proxy_loop
-    return proxy(args, log)
+    try:
+        return proxy(args, log)
+    except SystemExit:
+        log.info("exiting")
+        raise
 
 
 if __name__ == "__main__":
