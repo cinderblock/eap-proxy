@@ -55,6 +55,22 @@ debugging:
   --debug-packets       print packets in hex format to assist with debugging;
                         implies --debug
 """
+# Copyright (c) 2019, Jay Soffian. BSD-3-Clause: see LICENSE next to this file.
+#
+# This is https://github.com/cinderblock/eap-proxy, a fork of
+# jaysoffian/eap_proxy (archived 2026-01-06) from 44af03d. Its changes, so it
+# runs on a UniFi OS gateway (UXG-Pro) under Python 3:
+#   1. --vlan-id none: WAN-up checks use IF_WAN itself. Upstream always used
+#      IF_WAN.<vlan>, which doesn't exist on UniFi OS, so the WAN always read
+#      as down. A missing WAN-check interface is now an error at startup.
+#   2. getifgateway() also searches every routing table (`ip route show table
+#      all`): UniFi OS keeps WAN default routes out of the main table, which is
+#      all /proc/net/route shows.
+#   3. Python 3: ping payload and checksum padding are bytes; getifhwaddr()
+#      returns bytes.
+#   4. --set-mac and --restart-dhcp need EdgeOS; they're refused elsewhere.
+#   5. The SIGTERM handler no longer logs: a SIGTERM during a log write was
+#      lost, and the process kept running.
 # pylint:disable=invalid-name,missing-docstring
 import argparse
 import array

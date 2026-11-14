@@ -1,3 +1,33 @@
+# This fork
+
+[jaysoffian/eap_proxy](https://github.com/jaysoffian/eap_proxy) was archived in January 2026 (see "End of Life" below).
+This fork keeps it working on a UniFi OS gateway (we run it on a UXG-Pro, UniFi OS 6, Debian 13) under Python 3.
+Each fix is its own commit on top of upstream:
+
+1. **`--vlan-id none`.** The WAN-up checks always looked at `IF_WAN.<vlan>` (`eth2.0` by default). On UniFi OS the WAN
+   address is on the bare interface, so the WAN always read as down and `--ignore-when-wan-up` never ignored anything. A
+   missing interface is now a startup error.
+2. **Gateway lookup in every routing table.** UniFi OS keeps each WAN's default route in its own table
+   (`default via … table 201.eth1`), which `/proc/net/route` doesn't show, so `--ping-gateway` never found a gateway.
+3. **Python 3.** Every `--ping-gateway` / `--ping-ip` check raised `TypeError` (a `str` payload added to bytes).
+4. **`--set-mac` and `--restart-dhcp` are refused off EdgeOS**, since they call EdgeOS tools. On UniFi OS, use the WAN's
+   MAC address clone setting instead.
+5. **SIGTERM is never lost.** The handler logged; a signal that landed during another log write was swallowed by
+   `logging`, and the proxy kept running.
+
+Tests: `./run-tests.sh` (Linux; it uses `unshare` for a throwaway network namespace, so no root needed). The
+integration tests run the real proxy between veth pairs laid out like a UniFi gateway.
+
+On UniFi OS, with the fiber on `eth2` (the UniFi WAN, MAC cloned from the AT&T gateway) and the AT&T gateway's WAN port
+on `eth1`:
+
+```
+python3 -I eap_proxy.py --vlan-id none --ignore-when-wan-up --ignore-logoff --ping-gateway eth2 eth1
+```
+
+Keep the port that goes to the AT&T gateway on a network of its own. A port UniFi shows as "disabled" can still be
+bridged into a LAN.
+
 # End of Life
 
 I originally developed `eap_proxy` in 2017 for use on an EdgeRouter Lite running EdgeOS v1.9.1.1 where it worked well for me for many years. In 2024, I switched to a Dream Machine Pro using [wpasupplicant to bypass the AT&T router](https://old.reddit.com/r/Ubiquiti/comments/18rc0ag/att_modem_bypass_and_unifios_32x_guide/). 
