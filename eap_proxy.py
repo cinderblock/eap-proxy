@@ -35,7 +35,9 @@ configuring IF_WAN VLAN:
                         dhclient on IF_WAN VLAN
   --set-mac             set IF_WAN VLAN MAC (ether) address to router's MAC
                         address
-  --vlan-id VLAN_ID     set IF_WAN VLAN ID (default is 0)
+  --vlan-id VLAN_ID     set IF_WAN VLAN ID (default is 0); "none" means the
+                        WAN address is on IF_WAN itself, with no VLAN
+                        interface (UniFi OS)
 
 process management:
   --daemon              fork into background and attempt to run forever until
@@ -577,6 +579,22 @@ class EAPPacket(namedtuple("EAPPacket", "code id length data")):
 ### EAP Proxy
 
 
+def wan_ifname(args):
+    """Return the interface that holds the WAN address: IF_WAN.<vlan>, or
+       IF_WAN itself with --vlan-id none.
+    """
+    if args.vlan_id is None:
+        return args.if_wan
+    return "%s.%d" % (args.if_wan, args.vlan_id)
+
+
+def vlan_id_arg(value):
+    """argparse type for --vlan-id: an integer, or "none" for no VLAN."""
+    if value.lower() == "none":
+        return None
+    return int(value)
+
+
 class EAPProxy(object):
     _poll_events = {
         select.POLLERR: "POLLERR",
@@ -647,7 +665,7 @@ class EAPProxy(object):
         if not args.set_mac:
             return
 
-        if_vlan = "%s.%d" % (args.if_wan, args.vlan_id)
+        if_vlan = wan_ifname(args)
         if self.os.getmac(if_vlan) == eap.src:
             return
 
@@ -658,7 +676,7 @@ class EAPProxy(object):
         if not self.should_restart_dhcp(eap):
             return
         args = self.args
-        if_vlan = "%s.%d" % (args.if_wan, args.vlan_id)
+        if_vlan = wan_ifname(args)
         self.log.info("%s: restarting dhclient", if_vlan)
         self.os.restart_dhclient(if_vlan)
 
@@ -669,7 +687,7 @@ class EAPProxy(object):
 
     def check_wan_is_up(self):
         args, log = self.args, self.log
-        if_vlan = "%s.%d" % (args.if_wan, args.vlan_id)
+        if_vlan = wan_ifname(args)
         ipaddr = getifaddr(if_vlan)
         if ipaddr:
             log.debug("%s: %s", if_vlan, ipaddr)
@@ -751,7 +769,11 @@ def parse_args():
         help="set IF_WAN VLAN MAC (ether) address to router's MAC address",
     )
     g.add_argument(
-        "--vlan-id", type=int, default=0, help="set IF_WAN VLAN ID (default is 0)"
+        "--vlan-id",
+        type=vlan_id_arg,
+        default=0,
+        help='set IF_WAN VLAN ID (default is 0); "none" means the WAN address is '
+        "on IF_WAN itself, with no VLAN interface (UniFi OS)",
     )
 
     # process management options
@@ -801,6 +823,11 @@ def parse_args():
         if args.syslog:
             p.error("--debug-packets not allowed with --syslog")
         args.debug = True
+    for ifname in (args.if_wan, args.if_rtr, wan_ifname(args)):
+        try:
+            if_nametoindex(ifname)
+        except (OSError, ValueError):
+            p.error("no such interface: %s" % ifname)
     return args
 
 
