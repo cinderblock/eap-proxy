@@ -90,6 +90,7 @@ SIOCGIFADDR = 0x8915
 SIOCGIFFLAGS = 0x8913
 SIOCSIFFLAGS = 0x8914
 SOL_PACKET = 263
+VYATTA_INTERFACES = "/opt/vyatta/sbin/vyatta-interfaces.pl"
 
 ### Python 2 / 3 compatibility
 
@@ -457,7 +458,7 @@ class EdgeOS(object):
             return ex.returncode, ex.output
 
     def run_vyatta_interfaces(self, name, *args):
-        self.run("/opt/vyatta/sbin/vyatta-interfaces.pl", "--dev", name, *args)
+        self.run(VYATTA_INTERFACES, "--dev", name, *args)
 
     def restart_dhclient(self, name):
         # This isn't working:
@@ -851,6 +852,11 @@ def parse_args():
         if args.syslog:
             p.error("--debug-packets not allowed with --syslog")
         args.debug = True
+    if (args.set_mac or args.restart_dhcp) and not os.path.exists(VYATTA_INTERFACES):
+        p.error(
+            "--set-mac and --restart-dhcp need EdgeOS (%s is missing)"
+            % VYATTA_INTERFACES
+        )
     for ifname in (args.if_wan, args.if_rtr, wan_ifname(args)):
         try:
             if_nametoindex(ifname)
