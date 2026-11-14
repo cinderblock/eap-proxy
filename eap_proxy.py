@@ -223,7 +223,33 @@ def getifgateway(ifname):
                 continue
             if best_mask is None or mask < best_mask:
                 best_gateway, best_mask = gateway, mask
-    return ".".join(str(x) for x in best_gateway) if best_gateway else None
+    if best_gateway:
+        return ".".join(str(x) for x in best_gateway)
+    # /proc/net/route lists only the main table. UniFi OS puts each WAN's
+    # default route in its own table (e.g. "201.eth1"), so look there too.
+    return parse_ip_route_gateway(
+        subprocess.check_output(
+            ["ip", "-4", "route", "show", "table", "all", "default", "dev", ifname]
+        )
+    )
+
+
+def parse_ip_route_gateway(output):
+    """Return the next hop of the lowest-metric route in `ip route` `output`
+       (bytes or str), or None if no line has a "via".
+    """
+    if isinstance(output, bytes):
+        output = output.decode("ascii", "replace")
+    best_gateway, best_metric = None, None
+    for line in output.splitlines():
+        words = line.split()
+        if "via" not in words:
+            continue
+        gateway = words[words.index("via") + 1]
+        metric = int(words[words.index("metric") + 1]) if "metric" in words else 0
+        if best_metric is None or metric < best_metric:
+            best_gateway, best_metric = gateway, metric
+    return best_gateway
 
 
 ### Ping
