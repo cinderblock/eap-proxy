@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 usage: eap_proxy [-h] [--ping-gateway] [--ping-ip PING_IP]
                  [--ignore-when-wan-up] [--ignore-start] [--ignore-logoff]
@@ -181,7 +181,9 @@ def getifhwaddr(ifname):
     """Return MAC address for `ifname` as a packed string."""
     with open("/sys/class/net/%s/address" % ifname) as f:
         s = f.readline()
-    octets = s.split(":")
+    octets = s.strip().split(":")
+    if PY3:
+        return bytes(int(x, 16) for x in octets)
     return "".join(chr(int(x, 16)) for x in octets)
 
 
@@ -258,7 +260,7 @@ def parse_ip_route_gateway(output):
 def ipchecksum(packet):
     """Return IP checksum of `packet`"""
     # c.f. https://tools.ietf.org/html/rfc1071
-    arr = array.array("H", packet + "\0" if len(packet) % 2 else packet)
+    arr = array.array("H", packet + b"\0" if len(packet) % 2 else packet)
     chksum = sum(arr)
     chksum = (chksum >> 16) + (chksum & 0xFFFF)  # add high and low 16 bits
     chksum += chksum >> 16  # add carry
@@ -266,7 +268,7 @@ def ipchecksum(packet):
     return socket.htons(chksum)  # per RFC 1071
 
 
-def pingaddr(ipaddr, data="", timeout=1.0, strict=False):
+def pingaddr(ipaddr, data=b"", timeout=1.0, strict=False):
     """Return True if `ipaddr` replies to an ICMP ECHO request within
        `timeout` seconds else False. Provide optional `data` to include in
        the request. Any reply from `ipaddr` will suffice. Use `strict` to
