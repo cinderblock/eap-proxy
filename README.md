@@ -4,9 +4,9 @@
 This fork keeps it working on a UniFi OS gateway (we run it on a UXG-Pro, UniFi OS 6, Debian 13) under Python 3.
 Each fix is its own commit on top of upstream:
 
-1. **`--vlan-id none`.** The WAN-up checks always looked at `IF_WAN.<vlan>` (`eth2.0` by default). On UniFi OS the WAN
-   address is on the bare interface, so the WAN always read as down and `--ignore-when-wan-up` never ignored anything. A
-   missing interface is now a startup error.
+1. **`--vlan-id none`.** The WAN-up checks always looked at `IF_WAN.<vlan>` (`eth2.0` by default). On UniFi OS a WAN
+   without a VLAN has its address on the bare interface, so the WAN always read as down and `--ignore-when-wan-up` never
+   ignored anything. `none` checks `IF_WAN` itself. A missing interface is now a startup error.
 2. **Gateway lookup in every routing table.** UniFi OS keeps each WAN's default route in its own table
    (`default via … table 201.eth1`), which `/proc/net/route` doesn't show, so `--ping-gateway` never found a gateway.
 3. **Python 3.** Every `--ping-gateway` / `--ping-ip` check raised `TypeError` (a `str` payload added to bytes).
@@ -18,15 +18,39 @@ Each fix is its own commit on top of upstream:
 Tests: `./run-tests.sh` (Linux; it uses `unshare` for a throwaway network namespace, so no root needed). The
 integration tests run the real proxy between veth pairs laid out like a UniFi gateway.
 
-On UniFi OS, with the fiber on `eth2` (the UniFi WAN, MAC cloned from the AT&T gateway) and the AT&T gateway's WAN port
-on `eth1`:
+## Running it on UniFi OS
+
+The proxy needs three ports on the gateway:
+
+- **`IF_WAN`**: the AT&T fiber (an SFP, or the cable from an ONT). Make it a UniFi WAN, DHCP, with **MAC address clone**
+  set to the AT&T gateway's WAN MAC. AT&T ties the session and the DHCP lease to that MAC. (`--set-mac` is EdgeOS only.)
+- **`IF_ROUTER`**: the AT&T gateway's WAN port. Make this port a **WAN too**: a third WAN with a static address in an
+  unused /30, a gateway nothing answers, IPv6 off, failover-only. UniFi OS puts every LAN-role port into every LAN
+  bridge, whatever its native network, even when the port shows as "disabled". As a LAN port, the AT&T gateway would sit
+  on your LAN.
+- A LAN port for everything else.
+
+**Pick `--vlan-id` from where UniFi puts the WAN address**, which depends on the AT&T service:
+
+- **Active Ethernet ("iPAG")**, fiber straight into an SFP, no ONT: 802.1X runs untagged, but **data runs on VLAN 2**.
+  Set VLAN 2 on the UniFi WAN, which then lives on `IF_WAN.2`, and run with `--vlan-id 2`. The symptom without it:
+  802.1X succeeds, and DHCP gets no answer.
+- **GPON with an ONT**: data is untagged or priority-tagged (VLAN 0; EdgeOS setups use `vif 0`). Check which interface
+  holds the address (`ip -br addr`): `--vlan-id none` for the bare interface, or the VLAN number if UniFi made
+  `IF_WAN.<vlan>`.
+- Don't copy the AT&T gateway's own framing: it can tag differently from what AT&T answers for us (we saw a BGW320 send
+  DHCP as VLAN 0 on its Ethernet WAN on an iPAG line, where only VLAN 2 got a reply).
+
+Some AT&T gateways (the BGW320) choose their WAN port at boot. With the SFP moved to your gateway, power-cycle the AT&T
+gateway once so it uses its Ethernet WAN port.
+
+Example: fiber on `eth2` with data on VLAN 2, the AT&T gateway's WAN port on `eth1`:
 
 ```
-python3 -I eap_proxy.py --vlan-id none --ignore-when-wan-up --ignore-logoff --ping-gateway eth2 eth1
+python3 -I eap_proxy.py --vlan-id 2 --ignore-when-wan-up --ignore-logoff --ping-gateway eth2 eth1
 ```
 
-Keep the port that goes to the AT&T gateway on a network of its own. A port UniFi shows as "disabled" can still be
-bridged into a LAN.
+With `--ignore-when-wan-up`, an empty log is the healthy state: EAP lines appear only while the WAN is down.
 
 # End of Life
 
