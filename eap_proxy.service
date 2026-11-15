@@ -1,0 +1,22 @@
+# Example systemd unit for eap_proxy on a UniFi OS gateway. Edit the two ports:
+# the first is the AT&T fiber or ONT (the UniFi WAN), the second is the port
+# cabled to the AT&T gateway's WAN port. Install as
+# /etc/systemd/system/eap_proxy.service, with the script in /data/eap_proxy/.
+[Unit]
+Description=AT&T 802.1X (EAPOL) proxy
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/python3 -I /data/eap_proxy/eap_proxy.py eth2 eth1
+NotifyAccess=main
+WatchdogSec=90
+Restart=always
+RestartSec=10
+RuntimeDirectory=eap_proxy
+RuntimeDirectoryPreserve=yes
+SyslogIdentifier=eap_proxy
+
+[Install]
+WantedBy=multi-user.target

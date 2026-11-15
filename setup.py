@@ -4,9 +4,9 @@ from setuptools import setup
 
 setup(
     name="eap_proxy",
-    version="1.0",
-    description="Proxy EAP packets between interfaces on Linux-based routers.",
-    url="https://github.com/jaysoffian/eap_proxy",
+    version="2.0.0",
+    description="Relay AT&T 802.1X (EAPOL) on UniFi OS gateways.",
+    url="https://github.com/cinderblock/eap-proxy",
     author="Jay Soffian",
     license="BSD",
     py_modules=["eap_proxy"],
